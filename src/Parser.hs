@@ -3,6 +3,7 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use <$>" #-}
 {-# HLINT ignore "Eta reduce" #-}
+{-# OPTIONS_GHC -Wno-unused-do-bind #-}
 module Parser where
 
 import Text.Parsec
@@ -71,6 +72,7 @@ commaSep   = Tok.commaSep lexer
 whiteSpace = Tok.whiteSpace lexer
 integer    = Tok.integer lexer
 symbol     = Tok.symbol lexer
+semi = Tok.semi lexer
 
 -- Expression Parser
 parseExpr :: Parser Expr
@@ -105,9 +107,9 @@ parseIf = do
   reserved "if"
   cond <- parseExpr
   reserved "then"
-  tr <- parseExpr
+  tr <- braces parseSeqExpr <|> parseExpr
   reserved "else"
-  fl <- parseExpr
+  fl <- braces parseSeqExpr <|> parseExpr
   return $ If cond tr fl
 
 parseLet :: Parser Expr
@@ -116,7 +118,8 @@ parseLet = do
   var <- identifier
   reservedOp "="
   val <- parseExpr
-  body <- parseExpr
+  semi
+  body <- parseSeqExpr
   return $ Let var val body
 
 parseNew :: Parser Expr
@@ -172,6 +175,11 @@ parseArrayAssign = do
   val <- parseExpr
   return $ ArrayAssign arr idx val
 
+parseSeqExpr :: Parser Expr
+parseSeqExpr = do
+  exprs <- parseExpr `sepBy1` symbol ";"
+  return $ foldr1 Seq exprs
+
 -- Function and Program Parser
 parseFuncDef :: Parser FuncDef
 parseFuncDef = do
@@ -179,14 +187,14 @@ parseFuncDef = do
   name <- identifier
   args <- parens $ commaSep identifier
   reservedOp "="
-  body <- braces parseExpr <|> parseExpr
+  body <- braces parseSeqExpr <|> parseExpr
   return $ FuncDef name args body
 
 parseProgram :: Parser Program
 parseProgram = do
   whiteSpace
   funcs <- many parseFuncDef
-  expr <- parseExpr
+  expr <- parseSeqExpr
   eof
   return $ Program funcs expr
 
