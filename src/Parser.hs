@@ -4,6 +4,7 @@
 {-# HLINT ignore "Use <$>" #-}
 {-# HLINT ignore "Eta reduce" #-}
 {-# OPTIONS_GHC -Wno-unused-do-bind #-}
+{-# LANGUAGE InstanceSigs #-}
 module Parser where
 
 import Text.Parsec
@@ -11,14 +12,15 @@ import Text.Parsec.String (Parser)
 import Text.Parsec.Language (emptyDef)
 import Text.Parsec.Expr
 import qualified Text.Parsec.Token as Tok
+import Data.List (intercalate)
 
 -- AST Definitions
 
 data Program = Program [FuncDef] Expr
-  deriving (Show, Eq)
+  deriving Eq
 
 data FuncDef = FuncDef String [String] Expr
-  deriving (Show, Eq)
+  deriving Eq
 
 data Type
   = TInt
@@ -46,7 +48,49 @@ data Expr
   | ArrayAssign Expr Expr Expr
   | Seq Expr Expr
   | Null
-  deriving (Show, Eq)
+  deriving Eq
+
+instance Show Expr where
+  show :: Expr -> String
+  show (Var name) = name
+  show (IntLit n) = show n
+  show (BoolLit True) = "true"
+  show (BoolLit False) = "false"
+  show (BinOp Add x y) = "(" ++ show x ++ " + " ++ show y ++ ")"
+  show (BinOp Sub x y) = "(" ++ show x ++ " - " ++ show y ++ ")"
+  show (BinOp Eq x y) = "(" ++ show x ++ " == " ++ show y ++ ")"
+  show (If cond tr fl) = "if " ++ show cond ++ "\n"
+                            ++ indent ("then {\n" ++ indent (show tr) ++ "}")
+                            ++ indent ("else {\n" ++ indent (show fl) ++ "}")
+  show (Let var val body) = "let " ++ var ++ " = " ++ show val ++ ";\n" ++ show body
+  show (Call func args) = func ++ "(" ++ commaSep' (map show args) ++ ")"
+  show (New names values) = "new " ++ " ["
+                          ++ commaSep' (map (\name -> "\"" ++ name ++ "\"") names) ++ "] ["
+                          ++ commaSep' (map show values) ++ "]"
+  show (NewArray size initVal) = "newArray " ++ show size ++ " " ++ show initVal
+  show (FieldAccess obj field) = show obj ++ "." ++ field
+  show (FieldAssign obj field val) = show obj ++ "." ++ field ++ " = " ++ show val
+  show (ArrayAccess arr idx) = show arr ++ "[" ++ show idx ++ "]"
+  show (ArrayAssign arr idx val) = show arr ++ "[" ++ show idx ++ "] = " ++ show val
+  show (Seq expr1 expr2) = show expr1 ++";\n" ++ show expr2
+  show Null = "null"
+
+instance Show FuncDef where
+  show :: FuncDef -> String
+  show (FuncDef name args body) = "def " ++ name ++ "(" ++ commaSep' args ++ ") = {\n"
+                                  ++ indent (show body) ++ "}\n"
+
+instance Show Program where
+  show :: Program -> String
+  show (Program funcs body) = unlines (map show funcs) ++ show body
+
+-- Helper functions
+indent :: String -> String
+indent = unlines . map ("  " ++) . lines
+
+commaSep' :: [String] -> String
+commaSep' = intercalate ", "
+
 
 -- Lexer
 languageDef :: Tok.LanguageDef ()
@@ -163,7 +207,7 @@ parseNewArray = do
   initVal <- parseExpr
   return $ NewArray size initVal
 
--- parse "new [names] = [values]"
+-- parse "new [names] [values]"
 parseNew :: Parser Expr
 parseNew = do
   reserved "new"
