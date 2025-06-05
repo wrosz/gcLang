@@ -13,10 +13,7 @@ import Text.Parsec (ParseError, parse)
 import Parser
 
 -- | All tests - organized into unit tests and property tests
-tests = []
-    -- [ testGroup "Unit tests" unitTests
-    -- , testGroup "Property-based tests" propertyTests
-    -- ]
+tests = [ testGroup "Unit tests" unitTests]
 
 -- | Helper to run a parser on input and check against expected AST
 parseTest :: (Show a, Eq a) => (String -> Either ParseError a) -> String -> a -> Assertion
@@ -33,21 +30,29 @@ test_intLit :: Assertion
 test_intLit = parseTest parseMiniGC "let var = 436; var" $ Program [] $ Let "var" (IntLit 436) (Var "var")
 
 -- test new object creation
-test_parseNew :: Assertion
-test_parseNew = parseTest parseMiniGC "new [\"a\", \"b\"] [true, null]" $ Program [] $ New ["a", "b"] [(BoolLit True), Null]
+test_new :: Assertion
+test_new = parseTest parseMiniGC "new [\"a\", \"b\"] [true, null]" $ Program [] $ New ["a", "b"] [(BoolLit True), Null]
 
 -- test array assignment
-test_parseArrayAssign :: Assertion
-test_parseArrayAssign = parseTest parseMiniGC "arr[10] = x" $ Program [] $ ArrayAssign (Var "arr") (IntLit 10) (Var "x")
+test_arrayAssign :: Assertion
+test_arrayAssign = parseTest parseMiniGC "arr[10] = x" $ Program [] $ ArrayAssign (Var "arr") (IntLit 10) (Var "x")
 
 -- test sequences of expressions (binary operation; function call; null)
-test_parseSeq :: Assertion
-test_parseSeq = parseTest parseMiniGC "x + y; f(x); null" (
+test_seq :: Assertion
+test_seq = parseTest parseMiniGC "x + y; f(x); null" (
     Program [] (
         Seq (BinOp Add (Var "x") (Var "y")) (
             Seq (Call "f" [Var "x"]) (Null))))
 
 -- test function definitions
-test_parseFuncDef :: Assertion
-test_parseFuncDef = parseTest parseMiniGC "def func(x,y) = x == y; null" (
+test_funcDef :: Assertion
+test_funcDef = parseTest parseMiniGC "def func(x,y) = x == y null" (
      Program [FuncDef "func" ["x", "y"] (BinOp Eq (Var "x") (Var "y"))] Null)
+
+unitTests =
+    [ testCase "Parse integer literal" test_intLit
+    , testCase "Parse new object creation" test_new
+    , testCase "Parse array assignment" test_arrayAssign
+    , testCase "Parse a sequence of expressions" test_seq
+    , testCase "Parse a function definition" test_funcDef
+    ]

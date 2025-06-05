@@ -92,6 +92,9 @@ symbol = Tok.symbol lexer
 semi :: Parser String
 semi = Tok.semi lexer
 
+stringLiteral :: Parser String
+stringLiteral = Tok.stringLiteral lexer
+
 -- Expression Parser
 parseExpr :: Parser Expr
 parseExpr = do
@@ -164,7 +167,7 @@ parseNewArray = do
 parseNew :: Parser Expr
 parseNew = do
   reserved "new"
-  names <- brackets $ commaSep identifier
+  names <- brackets $ commaSep stringLiteral
   values <- brackets $ commaSep parseExpr
   return $ New names values
 
