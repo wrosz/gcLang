@@ -31,7 +31,7 @@ test_intLit = parseTest parseMiniGC "let var = 436; var" $ Program [] $ Let "var
 
 -- test new object creation
 test_new :: Assertion
-test_new = parseTest parseMiniGC "new [\"a\", \"b\"] [true, null]" $ Program [] $ New ["a", "b"] [(BoolLit True), Null]
+test_new = parseTest parseMiniGC "new [\"a\", \"b\"] [true, null]" $ Program [] $ New ["a", "b"] [BoolLit True, Null]
 
 -- test array assignment
 test_arrayAssign :: Assertion
@@ -42,7 +42,7 @@ test_seq :: Assertion
 test_seq = parseTest parseMiniGC "x + y; f(x); null" (
     Program [] (
         Seq (BinOp Add (Var "x") (Var "y")) (
-            Seq (Call "f" [Var "x"]) (Null))))
+            Seq (Call "f" [Var "x"]) Null)))
 
 -- test function definitions
 test_funcDef :: Assertion
