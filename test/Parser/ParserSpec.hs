@@ -14,7 +14,14 @@ import Parser
 
 -- | All tests - organized into unit tests and property tests
 tests = 
-  [ testGroup "Unit tests" unitTests
+  [ testGroup "Unit tests"
+    [ testCase "Parse integer literal" test_intLit
+    , testCase "Parse new object creation" test_new
+    , testCase "Parse array assignment" test_arrayAssign
+    , testCase "Parse a sequence of expressions" test_seq
+    , testCase "Parse a function definition" test_funcDef
+    , testCase "Parse a miniGC snippet" test_miniGCSnippet
+    ]
   , testGroup "Property-based tests"
       [ testProperty "Parse let with integer" prop_parseLetWithInt
       , testProperty "Parse addition expression" prop_parseAddExpr
@@ -121,7 +128,6 @@ prop_parseNull :: Property
 prop_parseNull =
   parseMiniGC "null" === Right (Program [] Null)
 
-
 -- | Unit tests
 
 -- test integer literals, let statements and variable references
@@ -148,10 +154,17 @@ test_funcDef :: Assertion
 test_funcDef = parseTest parseMiniGC "def func(x,y) = x == y null" (
      Program [FuncDef "func" ["x", "y"] (BinOp Eq (Var "x") (Var "y"))] Null)
 
-unitTests =
-    [ testCase "Parse integer literal" test_intLit
-    , testCase "Parse new object creation" test_new
-    , testCase "Parse array assignment" test_arrayAssign
-    , testCase "Parse a sequence of expressions" test_seq
-    , testCase "Parse a function definition" test_funcDef
-    ]
+program :: String
+program = "def f(x, y) = {" ++
+            "let z = x + y;" ++
+            "newArray 10 z}" ++
+            "def main() = (f(10, 20))[1]" ++
+            "main()"
+-- check if a program snippet parses correctly
+test_miniGCSnippet :: Assertion
+test_miniGCSnippet = do
+  case parseMiniGC program of
+        Right _ -> return ()
+        Left err -> assertFailure $ "Failed to parse miniGC snippet: " ++ show err
+
+

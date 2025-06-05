@@ -139,6 +139,7 @@ semi = Tok.semi lexer
 stringLiteral :: Parser String
 stringLiteral = Tok.stringLiteral lexer
 
+
 -- Expression Parser
 parseExpr :: Parser Expr
 parseExpr = do
@@ -262,7 +263,7 @@ parseSeqExpr = do
   exprs <- parseExpr `sepBy1` symbol ";"
   return $ foldr1 Seq exprs
 
--- Function and Program Parser
+-- function and program Parser
 parseFuncDef :: Parser FuncDef
 parseFuncDef = do
   reserved "def"
