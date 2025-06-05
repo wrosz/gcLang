@@ -23,11 +23,3 @@ parseFile = do
           putStrLn "Successfully parsed program:"
           print ast
     _ -> putStrLn "Usage: parser <filename>"
-
-
-program :: String
-program = "def f(x, y) = {" ++
-            "let z = x + y;" ++
-            "newArray 10 z}" ++
-            "def main() = f(10, 20)[1]" ++
-            "main()"

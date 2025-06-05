@@ -154,13 +154,13 @@ test_funcDef :: Assertion
 test_funcDef = parseTest parseMiniGC "def func(x,y) = x == y null" (
      Program [FuncDef "func" ["x", "y"] (BinOp Eq (Var "x") (Var "y"))] Null)
 
+-- check if a program snippet parses correctly
 program :: String
 program = "def f(x, y) = {" ++
             "let z = x + y;" ++
             "newArray 10 z}" ++
             "def main() = (f(10, 20))[1]" ++
             "main()"
--- check if a program snippet parses correctly
 test_miniGCSnippet :: Assertion
 test_miniGCSnippet = do
   case parseMiniGC program of
