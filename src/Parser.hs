@@ -9,11 +9,8 @@ module Parser where
 import Text.Parsec
 import Text.Parsec.String (Parser)
 import Text.Parsec.Language (emptyDef)
-import Data.List (intercalate)
 import Text.Parsec.Expr
 import qualified Text.Parsec.Token as Tok
-import Control.Applicative ((<*), (*>), (<$>), (<*>))
-import Data.Functor.Identity (Identity)
 
 -- AST Definitions
 
@@ -66,31 +63,31 @@ identifier :: Parser String
 identifier = Tok.identifier lexer
 
 reserved :: String -> Parser ()
-reserved   = Tok.reserved lexer
+reserved = Tok.reserved lexer
 
 reservedOp :: String -> Parser()
 reservedOp = Tok.reservedOp lexer
 
 parens :: Parser a -> Parser a
-parens     = Tok.parens lexer
+parens = Tok.parens lexer
 
 braces :: Parser a -> Parser a
-braces     = Tok.braces lexer
+braces = Tok.braces lexer
 
 brackets :: Parser a -> Parser a
-brackets   = Tok.brackets lexer
+brackets = Tok.brackets lexer
 
 commaSep :: Parser a -> Parser [a]
-commaSep   = Tok.commaSep lexer
+commaSep = Tok.commaSep lexer
 
 whiteSpace :: Parser ()
 whiteSpace = Tok.whiteSpace lexer
 
 integer :: Parser Integer
-integer    = Tok.integer lexer
+integer = Tok.integer lexer
 
 symbol :: String -> Parser String
-symbol     = Tok.symbol lexer
+symbol = Tok.symbol lexer
 
 semi :: Parser String
 semi = Tok.semi lexer
@@ -98,7 +95,7 @@ semi = Tok.semi lexer
 -- Expression Parser
 parseExpr :: Parser Expr
 parseExpr = do
-  notFollowedBy eof <?> "expression expected, but input is empty"
+  notFollowedBy eof <?> "expression, but input is empty."
   buildExpressionParser table parseTerm
   where
     table = [ [Infix (reservedOp "+" >> return (BinOp Add)) AssocLeft

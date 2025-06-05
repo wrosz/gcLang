@@ -57,6 +57,7 @@ test-suite gcLang-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Parser.ParserSpec
       Paths_gcLang
   autogen-modules:
       Paths_gcLang
@@ -64,7 +65,12 @@ test-suite gcLang-test
       test
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      HUnit >=1.6
+    , QuickCheck >=2.14
+    , base >=4.7 && <5
     , gcLang
     , parsec
+    , test-framework >=0.8
+    , test-framework-hunit >=0.3
+    , test-framework-quickcheck2 >=0.3
   default-language: Haskell2010
