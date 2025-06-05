@@ -62,39 +62,68 @@ languageDef = emptyDef
 lexer :: Tok.TokenParser ()
 lexer = Tok.makeTokenParser languageDef
 
+identifier :: Parser String
 identifier = Tok.identifier lexer
+
+reserved :: String -> Parser ()
 reserved   = Tok.reserved lexer
+
+reservedOp :: String -> Parser()
 reservedOp = Tok.reservedOp lexer
+
+parens :: Parser a -> Parser a
 parens     = Tok.parens lexer
+
+braces :: Parser a -> Parser a
 braces     = Tok.braces lexer
+
+brackets :: Parser a -> Parser a
 brackets   = Tok.brackets lexer
+
+commaSep :: Parser a -> Parser [a]
 commaSep   = Tok.commaSep lexer
+
+whiteSpace :: Parser ()
 whiteSpace = Tok.whiteSpace lexer
+
+integer :: Parser Integer
 integer    = Tok.integer lexer
+
+symbol :: String -> Parser String
 symbol     = Tok.symbol lexer
+
+semi :: Parser String
 semi = Tok.semi lexer
 
 -- Expression Parser
 parseExpr :: Parser Expr
-parseExpr = buildExpressionParser table parseTerm
-
+parseExpr = do
+  notFollowedBy eof <?> "expression expected, but input is empty"
+  buildExpressionParser table parseTerm
   where
     table = [ [Infix (reservedOp "+" >> return (BinOp Add)) AssocLeft
               ,Infix (reservedOp "-" >> return (BinOp Sub)) AssocLeft]
             , [Infix (reservedOp "==" >> return (BinOp Eq)) AssocNone]
             ]
 
-parseTerm :: Parser Expr
-parseTerm =  try parseCall
-         <|> parens parseExpr
-         <|> parseLiteral
-         <|> Var <$> identifier
-         <|> parseIf
-         <|> parseLet
-         <|> parseNew
-         <|> parseNewArray
-         <|> parseAccess
+parseBaseTerm :: Parser Expr
+parseBaseTerm = parens parseExpr
+            <|> parseLiteral
+            <|> parseIf
+            <|> parseLet
+            <|> parseNewArray
+            <|> parseNew
+            <|> try parseCall
+            <|> Var <$> identifier
 
+parseTerm :: Parser Expr
+parseTerm = try parseArrayAssign
+            <|> try parseArrayAccess
+            <|> try parseFieldAssign
+            <|> try parseFieldAccess
+            <|> parseBaseTerm
+
+-- parse "null", "true", "false"
 parseLiteral :: Parser Expr
 parseLiteral =
       (reserved "null" >> return Null)
@@ -102,16 +131,20 @@ parseLiteral =
   <|> (BoolLit True <$ reserved "true")
   <|> (BoolLit False <$ reserved "false")
 
+-- parse "if cond then tr else fl"
 parseIf :: Parser Expr
 parseIf = do
   reserved "if"
+  notFollowedBy (reserved "then") <?> "condition expression after 'if'"
   cond <- parseExpr
   reserved "then"
+  notFollowedBy (reserved "else") <?> "condition expression after 'then'"
   tr <- braces parseSeqExpr <|> parseExpr
   reserved "else"
   fl <- braces parseSeqExpr <|> parseExpr
   return $ If cond tr fl
 
+-- parse "let var = val; body"
 parseLet :: Parser Expr
 parseLet = do
   reserved "let"
@@ -122,13 +155,7 @@ parseLet = do
   body <- parseSeqExpr
   return $ Let var val body
 
-parseNew :: Parser Expr
-parseNew = do
-  reserved "new"
-  names <- brackets $ commaSep identifier
-  values <- brackets $ commaSep parseExpr
-  return $ New names values
-
+-- parse "newArray size initVal"
 parseNewArray :: Parser Expr
 parseNewArray = do
   reserved "newArray"
@@ -136,45 +163,56 @@ parseNewArray = do
   initVal <- parseExpr
   return $ NewArray size initVal
 
+-- parse "new [names] = [values]"
+parseNew :: Parser Expr
+parseNew = do
+  reserved "new"
+  names <- brackets $ commaSep identifier
+  values <- brackets $ commaSep parseExpr
+  return $ New names values
+
+-- parse "func(args)"
 parseCall :: Parser Expr
 parseCall = do
   func <- identifier
   args <- parens $ commaSep parseExpr
   return $ Call func args
 
-parseAccess :: Parser Expr
-parseAccess = try parseArrayAssign <|> try parseArrayAccess <|> try parseFieldAssign <|> parseFieldAccess
+-- parse "arr[idx]"
+parseArrayAccess :: Parser Expr
+parseArrayAccess = do
+  arr <- parseBaseTerm
+  idx <- brackets parseExpr
+  return $ ArrayAccess arr idx
 
+-- parse "arr[idx] = val"
+parseArrayAssign :: Parser Expr
+parseArrayAssign = do
+  arr <- parseBaseTerm
+  idx <- brackets parseExpr
+  reservedOp "="
+  val <- parseExpr
+  return $ ArrayAssign arr idx val
+
+-- parse "obj.field"
 parseFieldAccess :: Parser Expr
 parseFieldAccess = do
-  obj <- parseTerm
+  obj <- parseBaseTerm
   reservedOp "."
   field <- identifier
   return $ FieldAccess obj field
 
+-- parse "obj.field = val"
 parseFieldAssign :: Parser Expr
 parseFieldAssign = do
-  obj <- parseTerm
+  obj <- parseBaseTerm
   reservedOp "."
   field <- identifier
   reservedOp "="
   val <- parseExpr
   return $ FieldAssign obj field val
 
-parseArrayAccess :: Parser Expr
-parseArrayAccess = do
-  arr <- parseTerm
-  idx <- brackets parseExpr
-  return $ ArrayAccess arr idx
-
-parseArrayAssign :: Parser Expr
-parseArrayAssign = do
-  arr <- parseTerm
-  idx <- brackets parseExpr
-  reservedOp "="
-  val <- parseExpr
-  return $ ArrayAssign arr idx val
-
+-- parse a sequence of expressions separated by commas
 parseSeqExpr :: Parser Expr
 parseSeqExpr = do
   exprs <- parseExpr `sepBy1` symbol ";"
