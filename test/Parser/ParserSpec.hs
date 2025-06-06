@@ -13,7 +13,7 @@ import Text.Parsec (ParseError, parse)
 import Parser
 
 -- | All tests - organized into unit tests and property tests
-tests = 
+tests =
   [ testGroup "Unit tests"
     [ testCase "Parse integer literal" test_intLit
     , testCase "Parse new object creation" test_new
@@ -35,6 +35,7 @@ tests =
       , testCase "Fail: empty input" test_fail_empty
       , testCase "Edge: empty object" test_edge_emptyObject
       , testCase "Edge: newArray with zero" test_edge_zeroArray
+      , testProperty "Pretty prenting is an inverse operation" prop_prettyPrint
       ]
   ]
 
@@ -52,6 +53,7 @@ parseShouldFail input =
   case parseMiniGC input of
     Left _  -> return ()
     Right v -> assertFailure $ "Expected parse failure, but got: " ++ show (v)
+
 
 -- | Invalid syntax tests
 
@@ -76,6 +78,7 @@ test_fail_unclosedBracket = parseShouldFail "new [\"a\", \"b\"] [true, null"
 -- Empty input
 test_fail_empty :: Assertion
 test_fail_empty = parseShouldFail ""
+
 
 -- | Edge cases
 
@@ -154,17 +157,24 @@ test_funcDef :: Assertion
 test_funcDef = parseTest parseMiniGC "def func(x,y) = x == y null" (
      Program [FuncDef "func" ["x", "y"] (BinOp Eq (Var "x") (Var "y"))] Null)
 
--- check if a program snippet parses correctly
+-- helper program snippet for tests
 program :: String
 program = "def f(x, y) = {" ++
             "let z = x + y;" ++
             "newArray 10 z}" ++
             "def main() = (f(10, 20))[1]" ++
             "main()"
+
+-- check if a program snippet parses correctly
 test_miniGCSnippet :: Assertion
 test_miniGCSnippet = do
   case parseMiniGC program of
         Right _ -> return ()
         Left err -> assertFailure $ "Failed to parse miniGC snippet: " ++ show err
 
-
+-- check if pretty printing is an inverse operation
+prop_prettyPrint :: Property
+prop_prettyPrint =
+  let parsedProgram = parseMiniGC program
+      program' = either (\err -> "Error: " ++ show err) show parsedProgram
+  in parseMiniGC program' === parseMiniGC program'
