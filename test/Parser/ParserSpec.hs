@@ -6,8 +6,7 @@ import Test.Framework.Providers.QuickCheck2 (testProperty)
 import Test.HUnit
 import Test.QuickCheck
 
-import Control.Monad (liftM)
-import Text.Parsec (ParseError, parse)
+import Text.Parsec (ParseError)
 
 -- Import the parser module from your library
 import Parser
@@ -130,6 +129,7 @@ prop_parseSimpleCall n =
 prop_parseNull :: Property
 prop_parseNull =
   parseMiniGC "null" === Right (Program [] Null)
+
 
 -- | Unit tests
 

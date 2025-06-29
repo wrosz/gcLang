@@ -1,8 +1,6 @@
 module Main (main) where
 
 import System.Environment (getArgs)
-import System.IO (readFile)
-import Text.Parsec.Error (ParseError)
 import Parser 
 
 -- | Main function to parse a file

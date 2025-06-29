@@ -26,6 +26,7 @@ source-repository head
 library
   exposed-modules:
       Parser
+      Semantics
   other-modules:
       Paths_gcLang
   autogen-modules:
@@ -35,6 +36,8 @@ library
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       base >=4.7 && <5
+    , containers
+    , mtl
     , parsec
   default-language: Haskell2010
 
@@ -49,7 +52,9 @@ executable gcLang-exe
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
+    , containers
     , gcLang
+    , mtl
     , parsec
   default-language: Haskell2010
 
@@ -68,7 +73,9 @@ test-suite gcLang-test
       HUnit >=1.6
     , QuickCheck >=2.14
     , base >=4.7 && <5
+    , containers
     , gcLang
+    , mtl
     , parsec
     , test-framework >=0.8
     , test-framework-hunit >=0.3
