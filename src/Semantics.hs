@@ -1,11 +1,13 @@
 {-# LANGUAGE NamedFieldPuns #-}
-module Semantics where
+
+module Semantics (evalProgram) where
 
 import Parser
 import Data.Map as Map
 import Control.Monad (when)
 import Control.Monad.State
 
+eval :: Expr -> Interpreter Value
 
 -- | Definitions
 
@@ -37,16 +39,20 @@ data GCState = GCState {
   env :: Env,
   funcEnv :: FuncEnv,
   heap :: Heap,
-  nextRef :: Int,         -- to allocate new refs
-  stats :: MemStats       -- memory statistics
+  nextRef :: Int         -- to allocate new refs
 }
 
-data MemStats = MemStats {}
+initialState :: GCState
+initialState = GCState {
+  env = Map.empty,
+  funcEnv = Map.empty,
+  heap = Map.empty,
+  nextRef = 0
+}
 
 type Interpreter a = State GCState a
 
-
--- | Evaluating expressions
+--  Evaluating expressions
 
 -- alocation helper (update state when a new object allocation happens)
 alloc :: HeapObject -> Interpreter Value
@@ -56,7 +62,7 @@ alloc obj = do
   put st { heap = Map.insert ref obj heap, nextRef = ref + 1 }  -- update state (insert new reference to the heap, update last reference number)
   return (VRef ref)  -- return reference ID
 
-eval :: Expr -> Interpreter Value
+--eval :: Expr -> Interpreter Value
 
 -- integers and bools
 eval (IntLit n) = return $ VInt n
@@ -99,9 +105,9 @@ eval (If e1 e2 e3) = do
     _ -> error $ "Type error in If: expected bool, got " ++ show cond
 
 -- let statements
-eval (Let x e1 e2) = do
+eval (Let str e1 e2) = do
   v1 <- eval e1
-  modify (\st -> st { env = Map.insert x v1 (env st) })
+  modify (\st -> st { env = Map.insert str v1 (env st) })
   eval e2
 
 -- function calls
@@ -216,3 +222,35 @@ eval (Seq e1 e2) = do
 
 -- null expression
 eval Null = return VNull
+
+
+--  run a program
+
+-- evaluate function definitions
+evalFuncDef :: FuncDef -> Interpreter FuncDef
+evalFuncDef (FuncDef name args body) = do
+  st@GCState{funcEnv} <- get
+  let newFuncEnv = Map.insert name (FuncDef name args body) funcEnv
+  put (st {funcEnv = newFuncEnv})
+  return (FuncDef name args body)
+
+-- evaluates whole program
+programInterpreter :: Program -> Interpreter Value
+programInterpreter (Program funcs body) = do
+  mapM_ evalFuncDef funcs
+  eval body
+
+-- same as runState (runs program on a new environment, returns final state and value)
+runProgram :: Program -> (Value, GCState)
+runProgram program = runState (programInterpreter program) initialState
+
+-- same as evalState (runs program on a new environment, returns only value)
+evalProgram :: Program -> Value
+evalProgram program = evalState (programInterpreter program) initialState
+
+
+
+
+
+
+

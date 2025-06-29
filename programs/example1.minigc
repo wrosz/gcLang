@@ -25,7 +25,8 @@ def main() = {
   let temp = newArray 100 0;
   
   -- Return the list as the result
-  list
+  list;
+  temp
 }
 
 -- Helper to create a linked list node
