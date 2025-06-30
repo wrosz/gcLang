@@ -1,0 +1,36 @@
+-- Create a circular reference structure
+def createCycle() = {
+  let a = new ["data", "ref"] [42, null];
+  let b = new ["data", "ref"] [84, null];
+  
+  -- Create circular reference
+  a.ref = b;
+  b.ref = a;
+  
+  -- Return null, making the cycle unreachable
+  null
+}
+
+-- Main function that allocates memory and creates garbage
+def main() = {
+  -- Create a linked list
+  let list = createNode(1, 
+              createNode(2, 
+                createNode(3, null)));
+  
+  -- Create unreachable memory (garbage)
+  createCycle();
+  
+  -- Create and immediately abandon a large array
+  let temp = newArray 100 0;
+  
+  -- Return the list as the result
+  list;
+  temp
+}
+
+-- Helper to create a linked list node
+def createNode(value, next) = 
+  new ["value", "next"] [value, next]
+
+main()
