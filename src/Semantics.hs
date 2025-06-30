@@ -6,6 +6,7 @@ import Parser
 import Data.Map as Map
 import Control.Monad (when)
 import Control.Monad.State
+import qualified Data.Set as Set
 
 eval :: Expr -> Interpreter Value
 
@@ -248,9 +249,37 @@ runProgram program = runState (programInterpreter program) initialState
 evalProgram :: Program -> Value
 evalProgram program = evalState (programInterpreter program) initialState
 
+-- === Garbage Collector (Mark-and-Sweep) ===
+-- Wersja podstawowa: uruchamiana ręcznie lub po każdej alokacji
 
+-- Uruchom garbage collector
+gc :: Interpreter ()
+gc = do
+  st@GCState{env, heap} <- get
+  let reachable = markReachableFromEnv env heap
+  let heap' = removeUnreachable reachable heap
+  put st { heap = heap' }
 
+-- Znajdź wszystkie referencje osiągalne z aktualnego środowiska (env)
+markReachableFromEnv :: Env -> Heap -> Set.Set Ref
+markReachableFromEnv env heap = execState (mapM_ visitVal (Map.elems env)) Set.empty
+  where
+    visitVal :: Value -> State (Set.Set Ref) ()
+    visitVal (VRef r) = visitRef r
+    visitVal _        = return ()
 
+    visitRef :: Ref -> State (Set.Set Ref) ()
+    visitRef r = do
+      visited <- get
+      if Set.member r visited
+        then return ()
+        else do
+          put (Set.insert r visited)
+          case Map.lookup r heap of
+            Just (HObj fields) -> mapM_ visitVal (Map.elems fields)
+            Just (HArr elems)  -> mapM_ visitVal elems
+            Nothing            -> return ()
 
-
-
+-- Usuń wszystkie nieosiągalne obiekty z heap
+removeUnreachable :: Set.Set Ref -> Heap -> Heap
+removeUnreachable reachable heap = Map.filterWithKey (\k _ -> Set.member k reachable) heap
