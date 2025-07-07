@@ -24,6 +24,7 @@ dependencies:
 - parsec
 - containers
 - mtl
+- QuickCheck
 
 ghc-options:
 - -Wall

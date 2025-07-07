@@ -1,25 +1,23 @@
 {-# LANGUAGE NamedFieldPuns #-}
 
-module Semantics (evalProgram) where
+module Semantics where
 
 import Parser
 import Data.Map as Map
 import Control.Monad (when)
 import Control.Monad.State
 
-eval :: Expr -> Interpreter Value
-
--- | Definitions
+-- | DefinitionsS
 
 -- unique reference IDs for objects and arrays
 type Ref = Int
 
 -- Runtime values
-data Value
-  = VInt Int
-  | VBool Bool
-  | VRef Ref
-  | VNull
+data Value =
+  VInt Int |
+  VBool Bool |
+  VRef Ref |
+  VNull
   deriving (Show, Eq)
 
 -- environments
@@ -28,8 +26,9 @@ type FuncEnv = Map String FuncDef  -- function definitions
 
 -- arrays and objects
 data HeapObject =
-    HObj (Map String Value) |  -- objects
-    HArr [Value]               -- arrays
+  HObj (Map String Value) |  -- objects
+  HArr [Value]               -- arrays
+  deriving Show
 
 -- maps reference IDs to objects and arrays
 type Heap = Map Ref HeapObject
@@ -39,7 +38,7 @@ data GCState = GCState {
   env :: Env,
   funcEnv :: FuncEnv,
   heap :: Heap,
-  nextRef :: Int         -- to allocate new refs
+  nextRef :: Int -- to allocate new refs
 }
 
 initialState :: GCState
@@ -52,7 +51,8 @@ initialState = GCState {
 
 type Interpreter a = State GCState a
 
---  Evaluating expressions
+
+-- | Evaluating expressions
 
 -- alocation helper (update state when a new object allocation happens)
 alloc :: HeapObject -> Interpreter Value
@@ -62,7 +62,7 @@ alloc obj = do
   put st { heap = Map.insert ref obj heap, nextRef = ref + 1 }  -- update state (insert new reference to the heap, update last reference number)
   return (VRef ref)  -- return reference ID
 
---eval :: Expr -> Interpreter Value
+eval :: Expr -> Interpreter Value
 
 -- integers and bools
 eval (IntLit n) = return $ VInt n
@@ -81,6 +81,8 @@ eval (BinOp Add expr1 expr2) = do
   v2 <- eval expr2
   case (v1, v2) of
     (VInt i1, VInt i2) -> return $ VInt (i1 + i2)
+    (VNull, _) -> return VNull
+    (_, VNull) -> return VNull
     _ -> error $ "Type error in Add: expected two integers, got " ++ show (v1, v2)
 
 eval (BinOp Sub expr1 expr2) = do
@@ -88,6 +90,8 @@ eval (BinOp Sub expr1 expr2) = do
   v2 <- eval expr2
   case (v1, v2) of
     (VInt i1, VInt i2) -> return $ VInt (i1 - i2)
+    (VNull, _) -> return VNull
+    (_, VNull) -> return VNull
     _ -> error $ "Type error in Sub: expected two integers, got " ++ show (v1, v2)
 
 eval (BinOp Eq expr1 expr2) = do
@@ -159,7 +163,6 @@ eval (FieldAccess expr str) = do
     Just v -> return v
     Nothing -> error $ "Undefined field: " ++ show expr ++ "." ++ str
 
-
 -- field assignments
 eval (FieldAssign e1 str e2) = do
   ref <- eval e1
@@ -176,7 +179,6 @@ eval (FieldAssign e1 str e2) = do
     -- if not, throw errors
     Just (HArr arr) -> error $ "Type error in FieldAssign: expected object, got array " ++ show arr
     Nothing -> error $ "Undefined object: " ++ show e1
-
 
 -- array access
 eval (ArrayAccess e1 e2) = do
@@ -224,7 +226,7 @@ eval (Seq e1 e2) = do
 eval Null = return VNull
 
 
---  run a program
+-- | Run a program
 
 -- evaluate function definitions
 evalFuncDef :: FuncDef -> Interpreter FuncDef
@@ -247,10 +249,4 @@ runProgram program = runState (programInterpreter program) initialState
 -- same as evalState (runs program on a new environment, returns only value)
 evalProgram :: Program -> Value
 evalProgram program = evalState (programInterpreter program) initialState
-
-
-
-
-
-
 

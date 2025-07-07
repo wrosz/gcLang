@@ -8,7 +8,6 @@ import Test.QuickCheck
 
 import Text.Parsec (ParseError)
 
--- Import the parser module from your library
 import Parser
 
 -- | All tests - organized into unit tests and property tests

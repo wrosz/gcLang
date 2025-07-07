@@ -1,0 +1,12 @@
+cradle:
+  stack:
+    - path: "./src"
+      component: "gcLang:lib"
+    - path: "./app"
+      component: "gcLang:exe:gcLang-exe"
+    - path: "./test"
+      component: "gcLang:test:gcLang-test"
+    - path: "./test/Parser"
+      component: "gcLang:test:gcLang-test"
+    - path: "./test/Semantics"
+      component: "gcLang:test:gcLang-test"
