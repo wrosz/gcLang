@@ -1,6 +1,6 @@
 {-# LANGUAGE NamedFieldPuns #-}
 
-module Semantics (evalProgram) where
+module Semantics (evalProgram, runProgram, GCState(..)) where
 
 import Parser
 import Data.Map as Map
@@ -239,7 +239,11 @@ evalFuncDef (FuncDef name args body) = do
 programInterpreter :: Program -> Interpreter Value
 programInterpreter (Program funcs body) = do
   mapM_ evalFuncDef funcs
-  eval body
+  result <- eval body
+  modify (\st -> st { env = Map.insert "__result__" result (env st) })
+  gc
+  return result
+
 
 -- same as runState (runs program on a new environment, returns final state and value)
 runProgram :: Program -> (Value, GCState)

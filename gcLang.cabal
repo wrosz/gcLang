@@ -63,6 +63,7 @@ test-suite gcLang-test
   main-is: Spec.hs
   other-modules:
       Parser.ParserSpec
+      SemanticsSpec
       Paths_gcLang
   autogen-modules:
       Paths_gcLang
