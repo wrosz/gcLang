@@ -1,6 +1,13 @@
 {-# LANGUAGE NamedFieldPuns #-}
 
-module Semantics (evalProgram, runProgram, GCState(..)) where
+module Semantics (
+    evalProgram,
+    runProgram,
+    GCState(..),
+    Heap,
+    HeapObject(..),
+    Value(..)
+) where
 
 import Parser
 import Data.Map as Map
@@ -287,3 +294,14 @@ markReachableFromEnv env heap = execState (mapM_ visitVal (Map.elems env)) Set.e
 -- Usuń wszystkie nieosiągalne obiekty z heap
 removeUnreachable :: Set.Set Ref -> Heap -> Heap
 removeUnreachable reachable heap = Map.filterWithKey (\k _ -> Set.member k reachable) heap
+
+printHeap :: Heap -> IO ()
+printHeap heap = do
+  putStrLn "[Heap]"
+  mapM_ printObj (Map.toList heap)
+  where
+    printObj (ref, HObj fields) =
+      putStrLn $ "  " ++ show ref ++ ": Object " ++ show fields
+    printObj (ref, HArr elems) =
+      putStrLn $ "  " ++ show ref ++ ": Array " ++ show elems
+

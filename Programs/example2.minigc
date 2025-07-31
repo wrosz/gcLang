@@ -1,0 +1,14 @@
+def createCycle() = {
+  let a = new ["next"] [null];
+  let b = new ["next"] [a];
+  a.next = b;
+  null
+}
+
+def main() = {
+  createCycle();
+  let x = new ["val"] [42];
+  x
+}
+
+main()
