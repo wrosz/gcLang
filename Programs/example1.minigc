@@ -22,12 +22,12 @@ def main() = {
   createCycle();
   
   -- Create and immediately abandon a large array
-  let temp = newArray 100 0;
+  newArray 100 0;
   
   -- Return the list as the result
-  list;
-  temp
+  list
 }
+
 
 -- Helper to create a linked list node
 def createNode(value, next) = 

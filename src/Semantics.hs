@@ -1,23 +1,13 @@
 {-# LANGUAGE NamedFieldPuns #-}
 
-module Semantics (
-    evalProgram,
-    runProgram,
-    GCState(..),
-    Heap,
-    HeapObject(..),
-    Value(..)
-) where
+module Semantics (runProgram, GCState(..), printHeap) where
 
 import Parser
 import Data.Map as Map
 import Control.Monad (when)
-import Control.Monad.State
+import Control.Monad.State.Strict
+import Control.Monad.IO.Class (liftIO)
 import qualified Data.Set as Set
-
-eval :: Expr -> Interpreter Value
-
--- | Definitions
 
 -- unique reference IDs for objects and arrays
 type Ref = Int
@@ -31,15 +21,14 @@ data Value
   deriving (Show, Eq)
 
 -- environments
-type Env = Map String Value  -- variable names and values
-type FuncEnv = Map String FuncDef  -- function definitions
+type Env = Map String Value
+type FuncEnv = Map String FuncDef
 
 -- arrays and objects
 data HeapObject =
-    HObj (Map String Value) |  -- objects
-    HArr [Value]               -- arrays
+    HObj (Map String Value)
+  | HArr [Value]
 
--- maps reference IDs to objects and arrays
 type Heap = Map Ref HeapObject
 
 -- runtime state
@@ -47,7 +36,7 @@ data GCState = GCState {
   env :: Env,
   funcEnv :: FuncEnv,
   heap :: Heap,
-  nextRef :: Int         -- to allocate new refs
+  nextRef :: Int
 }
 
 initialState :: GCState
@@ -58,226 +47,167 @@ initialState = GCState {
   nextRef = 0
 }
 
-type Interpreter a = State GCState a
+type Interpreter a = StateT GCState IO a
 
---  Evaluating expressions
-
--- alocation helper (update state when a new object allocation happens)
+-- allocation helper
 alloc :: HeapObject -> Interpreter Value
 alloc obj = do
   st@GCState{heap, nextRef} <- get
-  let ref = nextRef  -- allocated reference ID
-  put st { heap = Map.insert ref obj heap, nextRef = ref + 1 }  -- update state (insert new reference to the heap, update last reference number)
-  return (VRef ref)  -- return reference ID
+  let ref = nextRef
+  put st { heap = Map.insert ref obj heap, nextRef = ref + 1 }
+  return (VRef ref)
 
---eval :: Expr -> Interpreter Value
+-- === eval expressions ===
 
--- integers and bools
+eval :: Expr -> Interpreter Value
 eval (IntLit n) = return $ VInt n
-eval (BoolLit bool) = return $ VBool bool
+eval (BoolLit b) = return $ VBool b
 
--- variables (return value of given variable)
 eval (Var x) = do
   GCState{env} <- get
   case Map.lookup x env of
     Just v -> return v
     Nothing -> error $ "Unbound variable: " ++ x
 
--- binary operations
-eval (BinOp Add expr1 expr2) = do
-  v1 <- eval expr1
-  v2 <- eval expr2
-  case (v1, v2) of
-    (VInt i1, VInt i2) -> return $ VInt (i1 + i2)
-    _ -> error $ "Type error in Add: expected two integers, got " ++ show (v1, v2)
-
-eval (BinOp Sub expr1 expr2) = do
-  v1 <- eval expr1
-  v2 <- eval expr2
-  case (v1, v2) of
-    (VInt i1, VInt i2) -> return $ VInt (i1 - i2)
-    _ -> error $ "Type error in Sub: expected two integers, got " ++ show (v1, v2)
-
-eval (BinOp Eq expr1 expr2) = do
-  v1 <- eval expr1
-  v2 <- eval expr2
+eval (BinOp Add e1 e2) = binOpInt (+) e1 e2
+eval (BinOp Sub e1 e2) = binOpInt (-) e1 e2
+eval (BinOp Eq e1 e2) = do
+  v1 <- eval e1
+  v2 <- eval e2
   return $ VBool (v1 == v2)
 
--- if statements
 eval (If e1 e2 e3) = do
   cond <- eval e1
-  tr <- eval e2
-  fl <- eval e3
   case cond of
-    VBool cond' -> if cond' then return tr else return fl
+    VBool True  -> eval e2
+    VBool False -> eval e3
     _ -> error $ "Type error in If: expected bool, got " ++ show cond
 
--- let statements
 eval (Let str e1 e2) = do
   v1 <- eval e1
   modify (\st -> st { env = Map.insert str v1 (env st) })
   eval e2
 
--- function calls
-eval (Call func exprs) = do
+eval (Call func args) = do
   st@GCState{env, funcEnv} <- get
   case Map.lookup func funcEnv of
-    Nothing -> error $ "Undefined function: " ++ show func
+    Nothing -> error $ "Undefined function: " ++ func
     Just (FuncDef _ paramNames body) -> do
-      -- check arity
-      when (length paramNames /= length exprs) $
+      when (length paramNames /= length args) $
         error $ "Function " ++ func ++ " expects " ++ show (length paramNames)
-              ++ " arguments, but got " ++ show (length exprs)
-      argVals <- mapM eval exprs  -- evaluate arguments
-      let newEnv = Map.fromList (zip paramNames argVals) -- create new environment with parameters bound to argument values
-      put st { env = newEnv } -- save old environment and switch to new one
-      result <- eval body  -- evaluate the body
-      modify $ \s -> s { env = env } -- restore old environment
+              ++ " arguments, but got " ++ show (length args)
+      argVals <- mapM eval args
+      let newEnv = Map.fromList (zip paramNames argVals)
+      put st { env = newEnv }
+      result <- eval body
+      modify $ \s -> s { env = env }
       return result
 
--- new objects
 eval (New fields exprs) = do
-  vs <- mapM eval exprs  -- evaluated expressions values
-  let fieldMap = Map.fromList (zip fields vs)
-  alloc (HObj fieldMap)  -- returns object ID
+  vs <- mapM eval exprs
+  alloc (HObj (Map.fromList (zip fields vs)))
 
--- new arrays
-eval (NewArray e1 e2) = do
-  arrSize <- eval e1
-  initValue <- eval e2
-  case arrSize of
-    VInt n -> do
-      when (n < 1) $ error $ "Value error in NewArray: expected positive size, got " ++ show n
-      let arr = HArr $ initValue : replicate (n-1) VNull
-      alloc arr  -- returns array ID
-    _ -> error $ "Value error in NewArray: expected integer size, got " ++ show arrSize
+eval (NewArray sizeExpr valExpr) = do
+  VInt size <- eval sizeExpr
+  initVal <- eval valExpr
+  when (size < 1) $ error "Array size must be positive"
+  alloc (HArr (replicate size initVal))
 
--- field access
-eval (FieldAccess expr str) = do
+eval (FieldAccess objExpr field) = do
   GCState{heap} <- get
-  ref <- eval expr
-  objId <- case ref of  -- check if ref is a reference
-    VRef k -> return k
-    _ -> error $ "Type error in FieldAcces: expected object field reference, got " ++ show ref
-  obj <- case Map.lookup objId heap of  -- check if ref maps to an actual object
-    Just (HObj o) -> return o
-    Just (HArr arr) -> error $ "Type error in FieldAccess: expected object, got array " ++ show arr
-    Nothing -> error $ "Undefined object: " ++ show expr
-  case Map.lookup str obj of -- return field value, if it exists
-    Just v -> return v
-    Nothing -> error $ "Undefined field: " ++ show expr ++ "." ++ str
+  VRef ref <- eval objExpr
+  case Map.lookup ref heap of
+    Just (HObj fields) ->
+      case Map.lookup field fields of
+        Just v -> return v
+        Nothing -> error $ "No such field: " ++ field
+    _ -> error "FieldAccess on non-object"
 
-
--- field assignments
-eval (FieldAssign e1 str e2) = do
-  ref <- eval e1
-  newVal <- eval e2
+eval (FieldAssign objExpr field valExpr) = do
+  VRef ref <- eval objExpr
+  val <- eval valExpr
   st@GCState{heap} <- get
-  objId <- case ref of  -- check if ref is a reference
-    VRef k -> return k
-    _ -> error "Field assignment to non-object"
-  case Map.lookup objId heap of
-    Just (HObj fields) -> do  -- if objId maps to an object, then update it with a new field and value
-      let updatedObj = HObj (Map.insert str newVal fields)
-      put st { heap = Map.insert objId updatedObj heap }
-      return newVal
-    -- if not, throw errors
-    Just (HArr arr) -> error $ "Type error in FieldAssign: expected object, got array " ++ show arr
-    Nothing -> error $ "Undefined object: " ++ show e1
+  case Map.lookup ref heap of
+    Just (HObj fields) ->
+      put st { heap = Map.insert ref (HObj (Map.insert field val fields)) heap }
+    _ -> error "FieldAssign on non-object"
+  return val
 
+eval (ArrayAccess arrExpr idxExpr) = do
+  VRef ref <- eval arrExpr
+  VInt idx <- eval idxExpr
+  GCState{heap} <- get
+  case Map.lookup ref heap of
+    Just (HArr elems) -> return (elems !! idx)
+    _ -> error "ArrayAccess on non-array"
 
--- array access
-eval (ArrayAccess e1 e2) = do
-  GCState {heap} <- get
-  ref <- eval e1
-  idx <- eval e2
-  arrId <- case ref of  -- check if ref is a reference
-    VRef k -> return k
-    _ -> error $ "Type error in ArrayAccess: expected array reference, got " ++ show ref
-  i <- case idx of  -- check if idx is an integer
-    VInt j -> return j
-    _ -> error $ "Type error in ArrayAcces: expected array index, got " ++ show idx
-  arr <- case Map.lookup arrId heap of  -- check if arrId maps to an actual array
-    Just (HArr a) -> return a
-    Just (HObj _) -> error $ "Type error in ArrayAccess: expected array, got object instead: " ++ show e1
-    Nothing -> error $ "Undefined array: " ++ show e1
-  return $ arr !! i
-
--- array assignment
-eval (ArrayAssign e1 e2 e3) = do
+eval (ArrayAssign arrExpr idxExpr valExpr) = do
+  VRef ref <- eval arrExpr
+  VInt idx <- eval idxExpr
+  val <- eval valExpr
   st@GCState{heap} <- get
-  ref <- eval e1
-  idx <- eval e2
-  newVal <- eval e3
-  arrId <- case ref of  -- check if ref is a reference
-    VRef k -> return k
-    _ -> error $ "Type error in ArrayAccess: expected array reference, got " ++ show ref
-  i <- case idx of  -- check if idx is an integer
-    VInt j -> return j
-    _ -> error $ "Type error in ArrayAcces: expected array index, got " ++ show idx
-  arr <- case Map.lookup arrId heap of  -- check if arrId maps to an actual array
-    Just (HArr a) -> return a
-    Just (HObj _) -> error $ "Type error in ArrayAccess: expected array, got object instead: " ++ show e1
-    Nothing -> error $ "Undefined array: " ++ show e1
-  let updateArr = Prelude.take i arr ++ [newVal] ++ Prelude.drop (i+1) arr -- update array by replacing idx-th element with new value
-  put st { heap = Map.insert arrId (HArr updateArr) heap }
-  return newVal
+  case Map.lookup ref heap of
+    Just (HArr elems) ->
+      let newArr = Prelude.take idx elems ++ [val] ++ Prelude.drop (idx+1) elems
+      in put st { heap = Map.insert ref (HArr newArr) heap }
+    _ -> error "ArrayAssign on non-array"
+  return val
 
--- sequence of expressions
-eval (Seq e1 e2) = do
-  _ <- eval e1
-  eval e2
-
--- null expression
+eval (Seq e1 e2) = eval e1 >> eval e2
 eval Null = return VNull
 
+binOpInt :: (Int -> Int -> Int) -> Expr -> Expr -> Interpreter Value
+binOpInt op e1 e2 = do
+  VInt v1 <- eval e1
+  VInt v2 <- eval e2
+  return $ VInt (v1 `op` v2)
 
---  run a program
+-- === function definitions and program ===
 
--- evaluate function definitions
 evalFuncDef :: FuncDef -> Interpreter FuncDef
-evalFuncDef (FuncDef name args body) = do
+evalFuncDef f@(FuncDef name _ _) = do
   st@GCState{funcEnv} <- get
-  let newFuncEnv = Map.insert name (FuncDef name args body) funcEnv
-  put (st {funcEnv = newFuncEnv})
-  return (FuncDef name args body)
+  put st { funcEnv = Map.insert name f funcEnv }
+  return f
 
--- evaluates whole program
 programInterpreter :: Program -> Interpreter Value
 programInterpreter (Program funcs body) = do
   mapM_ evalFuncDef funcs
   result <- eval body
   modify (\st -> st { env = Map.insert "__result__" result (env st) })
+
+  -- Sterta przed GC
+  stBefore <- get
+  liftIO $ putStrLn "Stan sterty przed Garbage Collector:"
+  liftIO $ printHeap (heap stBefore)
+
   gc
+
+  -- Sterta po GC
+  stAfter <- get
+  liftIO $ putStrLn "Stan sterty po Garbage Collector:"
+  liftIO $ printHeap (heap stAfter)
+
   return result
 
-
--- same as runState (runs program on a new environment, returns final state and value)
-runProgram :: Program -> (Value, GCState)
-runProgram program = runState (programInterpreter program) initialState
-
--- same as evalState (runs program on a new environment, returns only value)
-evalProgram :: Program -> Value
-evalProgram program = evalState (programInterpreter program) initialState
+runProgram :: Program -> IO (Value, GCState)
+runProgram program = runStateT (programInterpreter program) initialState
 
 -- === Garbage Collector (Mark-and-Sweep) ===
--- Wersja podstawowa: uruchamiana ręcznie lub po każdej alokacji
 
--- Uruchom garbage collector
 gc :: Interpreter ()
 gc = do
   st@GCState{env, heap} <- get
   let reachable = markReachableFromEnv env heap
-  let heap' = removeUnreachable reachable heap
-  put st { heap = heap' }
+  put st { heap = removeUnreachable reachable heap }
 
--- Znajdź wszystkie referencje osiągalne z aktualnego środowiska (env)
 markReachableFromEnv :: Env -> Heap -> Set.Set Ref
-markReachableFromEnv env heap = execState (mapM_ visitVal (Map.elems env)) Set.empty
+markReachableFromEnv env heap =
+  execState (mapM_ visitVal (Map.elems env)) Set.empty
   where
     visitVal :: Value -> State (Set.Set Ref) ()
     visitVal (VRef r) = visitRef r
-    visitVal _        = return ()
+    visitVal _ = return ()
 
     visitRef :: Ref -> State (Set.Set Ref) ()
     visitRef r = do
@@ -289,19 +219,17 @@ markReachableFromEnv env heap = execState (mapM_ visitVal (Map.elems env)) Set.e
           case Map.lookup r heap of
             Just (HObj fields) -> mapM_ visitVal (Map.elems fields)
             Just (HArr elems)  -> mapM_ visitVal elems
-            Nothing            -> return ()
+            Nothing             -> return ()
 
--- Usuń wszystkie nieosiągalne obiekty z heap
 removeUnreachable :: Set.Set Ref -> Heap -> Heap
-removeUnreachable reachable heap = Map.filterWithKey (\k _ -> Set.member k reachable) heap
+removeUnreachable reachable heap =
+  Map.filterWithKey (\k _ -> Set.member k reachable) heap
 
+-- Pomocnicze drukowanie sterty
 printHeap :: Heap -> IO ()
 printHeap heap = do
   putStrLn "[Heap]"
   mapM_ printObj (Map.toList heap)
   where
-    printObj (ref, HObj fields) =
-      putStrLn $ "  " ++ show ref ++ ": Object " ++ show fields
-    printObj (ref, HArr elems) =
-      putStrLn $ "  " ++ show ref ++ ": Array " ++ show elems
-
+    printObj (ref, HObj fields) = putStrLn $ "  " ++ show ref ++ ": Object " ++ show fields
+    printObj (ref, HArr elems) = putStrLn $ "  " ++ show ref ++ ": Array " ++ show elems
