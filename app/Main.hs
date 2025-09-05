@@ -11,10 +11,11 @@ main = do
     [filename] -> do
       content <- readFile filename
       case parseMiniGC content of
-        Left _ -> putStrLn "nie dziala sparsowanie"
-        Right p -> do
-          putStrLn "=== Rozpoczynam ewaluację programu ==="
-          (val, _) <- runProgram p
-          putStrLn "\n=== Ewaluacja zakończona ==="
-          putStrLn $ "Wynik programu: " ++ show val
-    _ -> putStrLn "nie dziala danie argumentu"
+        Left _ -> putStrLn "Program was not parsed successfully"
+        Right prog -> do
+          putStrLn "Program was parsed successfully"
+          putStrLn "=== Starting program evaluation ==="
+          (val, _) <- runProgram prog
+          putStrLn "\n=== Evaluation finished ==="
+          putStrLn $ "Program result: " ++ show val
+    _ -> putStrLn "Invalid arguments. Please provide a single filename."
